@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cooking Companion</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #fff8f0; color: #333; text-align: center; padding: 20px; }
+    textarea { width: 100%; height: 200px; font-size: 16px; padding: 10px; margin-bottom: 10px; }
+    button { font-size: 18px; padding: 10px 20px; margin: 5px; cursor: pointer; border-radius: 5px; border: none; background: #f28c28; color: white; }
+    button:hover { background: #e57300; }
+    #stepDisplay { font-size: 20px; margin: 20px 0; min-height: 60px; }
+  </style>
+</head>
+<body>
+
+  <h1>Cooking Companion 🌅</h1>
+
+  <textarea id="recipeInput" placeholder="Paste your recipe here..."></textarea><br>
+  <button id="startBtn">Start Cooking</button>
+  <button id="nextBtn">Next Step</button>
+  <button id="repeatBtn">Repeat Step</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="askBtn">Ask Question</button>
+
+  <div id="stepDisplay"></div>
+
+  <audio id="bgMusic" loop>
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    let steps = [];
+    let currentStep = 0;
+    let utterance;
+    const stepDisplay = document.getElementById("stepDisplay");
+    const bgMusic = document.getElementById("bgMusic");
+
+    // Define cuisines with keywords, voices, and music
+    const cuisines = [
+      {
+        name: "Italian",
+        keywords: ["pasta", "pecorino", "guanciale", "basil", "olive oil", "parmesan"],
+        voice: { lang: "it-IT", gender: "male" },
+        music: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+      },
+      {
+        name: "Japanese",
+        keywords: ["miso", "soy sauce", "nori", "ramen", "dashi", "mirin"],
+        voice: { lang: "ja-JP", gender: "female" },
+        music: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+      },
+      {
+        name: "French",
+        keywords: ["butter", "cream", "wine", "shallot", "baguette", "herbs"],
+        voice: { lang: "fr-FR", gender: "female" },
+        music: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
+      }
+    ];
+
+    // Detect cuisine based on keywords
+    function detectCuisine(text) {
+      const lowerText = text.toLowerCase();
+      for (let cuisine of cuisines) {
+        if (cuisine.keywords.some(k => lowerText.includes(k))) return cuisine;
+      }
+      return null; // default if no match
+    }
+
+    function speakStep(step, cuisine) {
+      if (utterance) speechSynthesis.cancel();
+      utterance = new SpeechSynthesisUtterance(step);
+      utterance.rate = 1;
+
+      // Set language/voice
+      const voices = speechSynthesis.getVoices();
+      if (cuisine) {
+        let match = voices.find(v => v.lang === cuisine.voice.lang && ((cuisine.voice.gender === "female" && v.name.toLowerCase().includes("female")) || (cuisine.voice.gender === "male" && v.name.toLowerCase().includes("male"))));
+        if (match) utterance.voice = match;
+      }
+
+      speechSynthesis.speak(utterance);
+    }
+
+    let currentCuisine = null;
+
+    document.getElementById("startBtn").addEventListener("click", () => {
+      const text = document.getElementById("recipeInput").value;
+      if (!text.trim()) return alert("Please paste a recipe!");
+
+      currentCuisine = detectCuisine(text);
+      if (currentCuisine) {
+        bgMusic.src = currentCuisine.music;
+        bgMusic.play();
+      }
+
+      steps = text.split(/\r?\n/).filter(line => line.trim() !== "");
+      currentStep = 0;
+      stepDisplay.textContent = steps[currentStep];
+      speakStep(steps[currentStep], currentCuisine);
+    });
+
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      if (currentStep < steps.length - 1) {
+        currentStep++;
+        stepDisplay.textContent = steps[currentStep];
+        speakStep(steps[currentStep], currentCuisine);
+      } else {
+        stepDisplay.textContent = "🎉 Recipe Complete!";
+        speechSynthesis.cancel();
+        bgMusic.pause();
+      }
+    });
+
+    document.getElementById("repeatBtn").addEventListener("click", () => {
+      if (steps.length > 0) speakStep(steps[currentStep], currentCuisine);
+    });
+
+    document.getElementById("pauseBtn").addEventListener("click", () => {
+      speechSynthesis.cancel();
+      bgMusic.pause();
+    });
+
+    document.getElementById("askBtn").addEventListener("click", () => {
+      const question = prompt("Ask your question:");
+      if (question) {
+        fetch(`https://api.openai.com/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer YOUR_OPENAI_API_KEY`
+          },
+          body: JSON.stringify({
+            model: "gpt-4",
+            messages: [
+              { role: "system", content: "You are a helpful cooking assistant." },
+              { role: "user", content: question }
+            ]
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          const answer = data.choices[0].message.content;
+          stepDisplay.textContent = answer;
+          speakStep(answer, currentCuisine);
+        })
+        .catch(error => console.error("Error:", error));
+      }
+    });
+  </script>
+
+</body>
+</html>
